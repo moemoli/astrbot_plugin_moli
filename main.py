@@ -1,6 +1,8 @@
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
+from astrbot.core.message.components import ComponentType, Reply
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import AiocqhttpMessageEvent
 from astrbot.core.provider.entities import ProviderRequest
 from .tools import (
@@ -18,7 +20,16 @@ class MoliBot(Star):
 
     @filter.on_llm_request()
     async def message_id_hook(self, event: AiocqhttpMessageEvent, req: ProviderRequest): # 请注意有三个参数
-        req.system_prompt += "\n本次发送的消息id为: " + str(event.message_obj.message_id) + "\n"
+        msg = ""
+        logger.info(f"消息ID挂钩完成，当前消息 {event.message_obj.message}")
+        for message in event.message_obj.message:
+            if isinstance(message, Reply):
+                msg += "\n本次消息回复了另一条消息，被回复的消息id为: " + str(message.id)
+        msg += "\n本次发送的消息消息id为: " + str(event.message_obj.message_id)
+        if event.message_obj.type == MessageType.GROUP_MESSAGE:
+            msg += "\n本次会话为群聊环境，群号为: " + str(event.message_obj.group_id)
+        req.system_prompt += msg
+        logger.info(f"消息ID挂钩完成，当前系统提示词为: {msg}")
 
     @filter.llm_tool()  # type: ignore
     async def llm_poke(
@@ -32,7 +43,6 @@ class MoliBot(Star):
         """
         try:
             await self.napcat.send_poke(event, user_id, group_id)
-            event.stop_event()
             yield
         except Exception as e:
             logger.error(f"戳一戳 {user_id} 失败: {e}")
@@ -52,7 +62,6 @@ class MoliBot(Star):
         """
         try:
             await event.bot.delete_msg(message_id = message_id)
-            event.stop_event()
             yield
         except Exception as e:
             logger.error(f"撤回 {message_id} 失败: {e}")
@@ -70,7 +79,6 @@ class MoliBot(Star):
         """
         try:
             await event.bot.get_group_member_info(user_id=user_id, group_id=group_id)
-            event.stop_event()
             yield
         except Exception as e:
             logger.error(f"获取在 {group_id} 信息 {user_id} 失败: {e}")
@@ -89,7 +97,6 @@ class MoliBot(Star):
         """
         try:
             await self.napcat.set_msg_emoji_like(event, message_id, emoji_id)
-            event.stop_event()
             yield
         except Exception as e:
             logger.error(f"为消息 {message_id} 做出emoji {emoji_id} 回复失败: {e}")
