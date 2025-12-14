@@ -18,7 +18,7 @@ class MoliBot(Star):
 
     @filter.on_llm_request()
     async def message_id_hook(self, event: AiocqhttpMessageEvent, req: ProviderRequest): # 请注意有三个参数
-        req.system_prompt += "\n本次发送者的消息的id为: " + str(event.message_obj.message_id) + "\n"
+        req.system_prompt += "\n本次发送的消息id为: " + str(event.message_obj.message_id) + "\n"
 
     @filter.llm_tool()  # type: ignore
     async def llm_poke(
@@ -35,6 +35,7 @@ class MoliBot(Star):
             event.stop_event()
             yield
         except Exception as e:
+            logger.error(f"戳一戳 {user_id} 失败: {e}")
             yield
     
     @filter.llm_tool()  # type: ignore
@@ -54,6 +55,7 @@ class MoliBot(Star):
             event.stop_event()
             yield
         except Exception as e:
+            logger.error(f"撤回 {message_id} 失败: {e}")
             yield
     
     @filter.llm_tool()  # type: ignore
@@ -71,6 +73,7 @@ class MoliBot(Star):
             event.stop_event()
             yield
         except Exception as e:
+            logger.error(f"获取在 {group_id} 信息 {user_id} 失败: {e}")
             yield
 
     @filter.llm_tool()  # type: ignore
@@ -89,6 +92,7 @@ class MoliBot(Star):
             event.stop_event()
             yield
         except Exception as e:
+            logger.error(f"为消息 {message_id} 做出emoji {emoji_id} 回复失败: {e}")
             yield
     async def terminate(self):
         """可选择实现异步的插件销毁方法，当插件被卸载/停用时会调用。"""
