@@ -1,15 +1,19 @@
+from aiocqhttp import MessageSegment
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
 from astrbot.core.message.components import ComponentType, Reply
 from astrbot.core.platform.message_type import MessageType
-from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import AiocqhttpMessageEvent
+from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
+    AiocqhttpMessageEvent,
+)
 from astrbot.core.provider.entities import ProviderRequest
 from .tools import (
     napcat,
 )
 
-@register("moli", "moemoli", "Moli Bot", "1.0.0")
+
+@register("moli", "moemoli", "MoeMoli", "1.3.7")
 class MoliBot(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -19,12 +23,14 @@ class MoliBot(Star):
         self.napcat = napcat.NapCat()
 
     @filter.on_llm_request()
-    async def message_id_hook(self, event: AiocqhttpMessageEvent, req: ProviderRequest): # 请注意有三个参数
+    async def message_id_hook(
+        self, event: AiocqhttpMessageEvent, req: ProviderRequest
+    ):  # 请注意有三个参数
         msg = ""
         logger.info(f"消息ID挂钩完成，当前消息 {event.message_obj.message}")
         for message in event.message_obj.message:
             if isinstance(message, Reply):
-                msg += "\n本次消息回复了另一条消息，被回复的消息id为: " + str(message.id)
+                msg += "\n被回复的消息id为: " + str(message.id)
         msg += "\n本次发送的消息消息id为: " + str(event.message_obj.message_id)
         if event.message_obj.type == MessageType.GROUP_MESSAGE:
             msg += "\n本次会话为群聊环境，群号为: " + str(event.message_obj.group_id)
@@ -32,9 +38,7 @@ class MoliBot(Star):
         logger.info(f"消息ID挂钩完成，当前系统提示词为: {msg}")
 
     @filter.llm_tool()  # type: ignore
-    async def llm_poke(
-        self, event: AiocqhttpMessageEvent, user_id: str, group_id: str
-    ):
+    async def llm_poke(self, event: AiocqhttpMessageEvent, user_id: str, group_id: str):
         """
         戳一戳某用户。被戳一戳的用户将收到戳一戳的提示。
         Args:
@@ -43,30 +47,28 @@ class MoliBot(Star):
         """
         try:
             await self.napcat.send_poke(event, user_id, group_id)
-            yield
+            yield event.plain_result("戳一戳成功")
         except Exception as e:
             logger.error(f"戳一戳 {user_id} 失败: {e}")
-            yield
-    
+            yield event.plain_result("戳一戳失败")
+
     @filter.llm_tool()  # type: ignore
-    async def llm_del_msg(
-        self, event: AiocqhttpMessageEvent, message_id: int
-    ):
+    async def llm_del_msg(self, event: AiocqhttpMessageEvent, message_id: int):
         """
         撤回某一条用户的消息，被删除的消息将为群聊中所有成员不可见。
         在私聊场景中，只可以撤回自己的消息，且只能撤回两分钟内的消息。
         在群聊场景中，若你为管理员，则可以撤回所有人的消息。
         Args:
             message_id(number): 要删除的消息id，必定为一串数字，如(12345678)
-            
+
         """
         try:
-            await event.bot.delete_msg(message_id = message_id)
-            yield
+            await event.bot.delete_msg(message_id=message_id)
+            yield event.plain_result("撤回消息成功")
         except Exception as e:
             logger.error(f"撤回 {message_id} 失败: {e}")
-            yield
-    
+            yield event.plain_result("撤回消息失败")
+
     @filter.llm_tool()  # type: ignore
     async def llm_get_member_info(
         self, event: AiocqhttpMessageEvent, user_id: int, group_id: int
@@ -78,11 +80,24 @@ class MoliBot(Star):
             group_id(number): 群号，必定为一串数字，如(12345678)
         """
         try:
-            await event.bot.get_group_member_info(user_id=user_id, group_id=group_id)
-            yield
+            info = await event.bot.get_group_member_info(
+                user_id=user_id, group_id=group_id
+            )
+            role = info.get("role")
+            user_id = info.get("user_id")
+            nickname = info.get("nickname")
+            card = info.get("card")
+            sex = info.get("sex")
+            age = info.get("age")
+            join_time = info.get("join_time")
+            last_sent_time = info.get("last_sent_time")
+            title = info.get("title")
+            yield event.plain_result(
+                f"ID: {user_id} ,角色: {role}, 昵称: {nickname}, 群名片: {card}, 性别: {sex}, 年龄: {age}, 加入时间: {join_time}, 最后发言时间: {last_sent_time}, 头衔: {title}"
+            )
         except Exception as e:
             logger.error(f"获取在 {group_id} 信息 {user_id} 失败: {e}")
-            yield
+            yield event.plain_result("获取成员信息失败")
 
     @filter.llm_tool()  # type: ignore
     async def llm_set_msg_emoji_like(
@@ -97,9 +112,28 @@ class MoliBot(Star):
         """
         try:
             await self.napcat.set_msg_emoji_like(event, message_id, emoji_id)
-            yield
+            yield event.plain_result("emoji回复成功")
         except Exception as e:
             logger.error(f"为消息 {message_id} 做出emoji {emoji_id} 回复失败: {e}")
-            yield
+            yield event.plain_result("emoji回复失败")
+
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.platform_adapter_type(filter.PlatformAdapterType.AIOCQHTTP)
+    async def group_poke(self, event: AiocqhttpMessageEvent):
+        """监听群戳一戳事件"""
+        raw = event.message_obj.raw_message
+        if isinstance(raw, dict):
+            notice_type = raw.get("notice_type", "")
+            sub_type = raw.get("sub_type", "")
+            if notice_type == "notify" and sub_type == "poke":
+                target_id = raw.get("target_id", 0)
+                user_id = raw.get("user_id", 0)
+                group_id = raw.get("group_id", 0)
+                if target_id == int(event.get_self_id()):
+                    logger.info(f"收到来自用户 {user_id} 的戳一戳，自动回戳")
+                    await self.napcat.send_poke(
+                        event, user_id=str(user_id), group_id=str(group_id)
+                    )
+
     async def terminate(self):
         """可选择实现异步的插件销毁方法，当插件被卸载/停用时会调用。"""
