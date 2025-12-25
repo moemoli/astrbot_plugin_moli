@@ -38,41 +38,9 @@ class MoliBot(Star):
         logger.info(f"消息ID挂钩完成，当前系统提示词为: {msg}")
 
     @filter.llm_tool()  # type: ignore
-    async def llm_poke(self, event: AiocqhttpMessageEvent, user_id: str, group_id: str):
-        """
-        戳一戳某用户。被戳一戳的用户将收到戳一戳的提示。
-        Args:
-            user_id(string): 要戳一戳的用户的QQ账号，必定为一串数字，如(12345678)
-            group_id(string): 群号，必定为一串数字，如(12345678)，若为私聊场景，该选项为空字符串
-        """
-        try:
-            await self.napcat.send_poke(event, user_id, group_id)
-            yield event.plain_result("戳一戳成功")
-        except Exception as e:
-            logger.error(f"戳一戳 {user_id} 失败: {e}")
-            yield event.plain_result("戳一戳失败")
-
-    @filter.llm_tool()  # type: ignore
-    async def llm_del_msg(self, event: AiocqhttpMessageEvent, message_id: int):
-        """
-        撤回某一条用户的消息，被删除的消息将为群聊中所有成员不可见。
-        在私聊场景中，只可以撤回自己的消息，且只能撤回两分钟内的消息。
-        在群聊场景中，若你为管理员，则可以撤回所有人的消息。
-        Args:
-            message_id(number): 要删除的消息id，必定为一串数字，如(12345678)
-
-        """
-        try:
-            await event.bot.delete_msg(message_id=message_id)
-            yield event.plain_result("撤回消息成功")
-        except Exception as e:
-            logger.error(f"撤回 {message_id} 失败: {e}")
-            yield event.plain_result("撤回消息失败")
-
-    @filter.llm_tool()  # type: ignore
     async def llm_get_member_info(
         self, event: AiocqhttpMessageEvent, user_id: int, group_id: int
-    ):
+    ) -> str:
         """
         获取你所在群的某个成员的信息。
         Args:
@@ -92,12 +60,36 @@ class MoliBot(Star):
             join_time = info.get("join_time")
             last_sent_time = info.get("last_sent_time")
             title = info.get("title")
-            yield event.plain_result(
-                f"ID: {user_id} ,角色: {role}, 昵称: {nickname}, 群名片: {card}, 性别: {sex}, 年龄: {age}, 加入时间: {join_time}, 最后发言时间: {last_sent_time}, 头衔: {title}"
-            )
+            return f"ID: {user_id} ,角色: {role}, 昵称: {nickname}, 群名片: {card}, 性别: {sex}, 年龄: {age}, 加入时间: {join_time}, 最后发言时间: {last_sent_time}, 头衔: {title}"
+            
         except Exception as e:
             logger.error(f"获取在 {group_id} 信息 {user_id} 失败: {e}")
-            yield event.plain_result("获取成员信息失败")
+            return "获取成员信息失败"
+
+    @filter.llm_tool()  # type: ignore
+    async def llm_poke(self, event: AiocqhttpMessageEvent, user_id: str, group_id: str):
+        """
+        戳一戳某用户。被戳一戳的用户将收到戳一戳的提示。
+        Args:
+            user_id(string): 要戳一戳的用户的QQ账号，必定为一串数字，如(12345678)
+            group_id(string): 群号，必定为一串数字，如(12345678)，若为私聊场景，该选项为空字符串
+        """
+        await self.napcat.send_poke(event, user_id, group_id)
+
+    @filter.llm_tool()  # type: ignore
+    async def llm_del_msg(self, event: AiocqhttpMessageEvent, message_id: int):
+        """
+        撤回某一条用户的消息，被删除的消息将为群聊中所有成员不可见。
+        在私聊场景中，只可以撤回自己的消息，且只能撤回两分钟内的消息。
+        在群聊场景中，若你为管理员，则可以撤回所有人的消息。
+        Args:
+            message_id(number): 要删除的消息id，必定为一串数字，如(12345678)
+
+        """
+        try:
+            await event.bot.delete_msg(message_id=message_id)
+        except Exception as e:
+            logger.error(f"撤回 {message_id} 失败: {e}")
 
     @filter.llm_tool()  # type: ignore
     async def llm_set_msg_emoji_like(
@@ -112,10 +104,10 @@ class MoliBot(Star):
         """
         try:
             await self.napcat.set_msg_emoji_like(event, message_id, emoji_id)
-            yield event.plain_result("emoji回复成功")
+
         except Exception as e:
             logger.error(f"为消息 {message_id} 做出emoji {emoji_id} 回复失败: {e}")
-            yield event.plain_result("emoji回复失败")
+        
 
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
     @filter.platform_adapter_type(filter.PlatformAdapterType.AIOCQHTTP)
@@ -133,6 +125,9 @@ class MoliBot(Star):
                     logger.info(f"收到来自用户 {user_id} 的戳一戳，自动回戳")
                     await self.napcat.send_poke(
                         event, user_id=str(user_id), group_id=str(group_id)
+                    )
+                    yield event.image_result(
+                        "https://sucyan.top/api/tupian/chaijun.php"
                     )
 
     async def terminate(self):
